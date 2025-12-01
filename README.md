@@ -1,6 +1,6 @@
 # 🗣️ Language-Independent Speaking Rate Calculator
 
-This project is a Python-based tool that calculates the speaking rate of audio files. Unlike traditional tools that rely on Speech-to-Text (ASR) transcription, this program uses **Signal Processing** to detect syllable nuclei (energy peaks) in the audio waveform.
+This project is a Python-based tool that calculates the speaking rate and average energy of audio files. Unlike traditional tools that rely on Speech-to-Text (ASR) transcription, this program uses **Signal Processing** to detect syllable nuclei (energy peaks) in the audio waveform.
 
 This makes the tool **language-independent**, faster, and capable of running without heavy machine learning models.
 
@@ -20,18 +20,26 @@ SpeakingRateProject/
 └── README.md                # 📖 This file
 ```
 
-## 🧠 The Logic: Syllable Nuclei Counting
+## 🧠 The Logic
 
-Since we are not transcribing words, we calculate the rate in **Syllables Per Second (SPS)** using the following acoustic approach:
+The program performs two main analyses on the audio waveform:
 
-1.  **Audio Loading:** The program loads the `.wav` file at its native sampling rate.
-2.  **Envelope Extraction:** It calculates the **Root Mean Square (RMS) Energy** of the waveform. This creates a smooth curve representing the "loudness" or intensity over time.
-3.  **Peak Detection:**
-      * Speech is rhythmic. Syllables typically correspond to peaks in the energy envelope (vowels are louder than consonants).
-      * The program uses `scipy.signal.find_peaks` to identify these local maxima.
-      * **Filters:** It applies a minimum height threshold (to ignore background noise) and a minimum distance threshold (to prevent counting one long vowel as multiple syllables).
-4.  **Calculation:**
-    $$\text{Speaking Rate} = \frac{\text{Total Detected Peaks}}{\text{Duration (seconds)}}$$
+### 1\. Speaking Rate (Syllables/Sec)
+
+Instead of transcribing words, we calculate the rate in **Syllables Per Second (SPS)**:
+
+1.  **Envelope Extraction:** Calculates the Root Mean Square (RMS) Energy to map "loudness" over time.
+2.  **Peak Detection:** Uses `scipy.signal.find_peaks` to find vowels (syllable nuclei).
+      * *Filters:* Applies a minimum height threshold to ignore background noise and a minimum distance threshold to prevent double-counting long vowels.
+3.  **Formula:** $\text{Speaking Rate} = \frac{\text{Total Peaks}}{\text{Duration (sec)}}$
+
+### 2\. Average Energy (Non-Silent)
+
+Calculates how "energetic" or loud the speaker is, relative to their own peak volume.
+
+1.  **Normalization:** The audio energy is scaled between 0.0 (silence) and 1.0 (loudest peak).
+2.  **Silence Removal:** The program ignores any audio frames below the `MIN_PEAK_HEIGHT` threshold (silence or background hiss).
+3.  **Averaging:** It calculates the mean of the remaining "active speech" frames.
 
 ## 🛠️ Installation
 
@@ -41,7 +49,7 @@ Since we are not transcribing words, we calculate the rate in **Syllables Per Se
 
 ### 2\. Install Dependencies
 
-Open your terminal or command prompt in the project folder and run:
+Open your terminal in the project folder and run:
 
 ```bash
 pip install -r requirements.txt
@@ -69,22 +77,29 @@ scipy
 
 ## ⚙️ Configuration (Tuning)
 
-If you find the detection is too sensitive (counting noise) or not sensitive enough (missing soft speech), you can adjust the constants at the top of `main.py`:
+You can adjust the sensitivity of the analysis by modifying the constants at the top of `main.py`:
 
   * **`MIN_PEAK_HEIGHT` (Default: 0.02):**
-      * Increase this value (e.g., to 0.05) if your audio has background noise.
-      * Decrease it if the speakers are very quiet.
+      * The threshold for what counts as "sound" vs "silence."
+      * Increase this (e.g., to 0.05) if your audio has background noise.
   * **`MIN_PEAK_DISTANCE_SEC` (Default: 0.1):**
-      * This represents the minimum time (100ms) between syllables.
+      * The minimum time (100ms) required between two syllables.
       * Decrease this if the speaker talks extremely fast.
 
 ## 📄 Output Example
 
 The content of `results.txt` will look like this:
 
-```text
-File Name         Duration (sec)  Speaking Rate (syllables/sec)
-recording_1.wav            12.50                           4.20
-interview_fr.wav           45.00                           3.85
-speech_test.wav             5.20                           0.00
-```
+| File Name | Duration (sec) | Speaking Rate (syllables/sec) | Avg Energy (Non-Silent) |
+| :--- | :--- | :--- | :--- |
+| `recording_1.wav` | 12.50 | 4.20 | 0.4521 |
+| `interview_fr.wav` | 45.00 | 3.85 | 0.3810 |
+| `speech_test.wav` | 5.20 | 0.00 | 0.0000 |
+
+*Note: **Avg Energy** is normalized (0-1). A value of 0.45 means the average active speech volume is 45% of the maximum peak volume in that file.*
+
+-----
+
+### Next Step for you:
+
+Would you like to automate this further by adding a feature to **bulk rename** the input files (e.g., `file1.wav`, `file2.wav`) before processing them, so your output table is cleaner?
