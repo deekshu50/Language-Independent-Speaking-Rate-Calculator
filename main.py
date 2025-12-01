@@ -8,7 +8,13 @@ from scipy.signal import find_peaks
 # --- Configuration ---
 WAV_DIR = "wav"
 OUTPUT_FILE = "results.txt"
-OUTPUT_COLUMNS = ["File Name", "Duration (sec)", "Speaking Rate (syllables/sec)"]
+# [CHANGE 1] Added 'Avg Energy (Non-Silent)' to columns
+OUTPUT_COLUMNS = [
+    "File Name",
+    "Duration (sec)",
+    "Speaking Rate (syllables/sec)",
+    "Avg Energy (Non-Silent)",
+]
 
 # Signal Processing Hyperparameters
 MIN_PEAK_HEIGHT = 0.02
@@ -29,13 +35,12 @@ def get_audio_files(directory):
 
 def calculate_rate(file_path):
     """
-    Analyzes audio waveform to count syllable nuclei (peaks in energy)
-    and returns filename, duration, and rate.
+    Analyzes audio waveform to count syllable nuclei and calculate average energy.
     """
     filename = os.path.basename(file_path)
 
     try:
-        # Load audio (native sampling rate)
+        # Load audio
         y, sr = librosa.load(file_path, sr=None)
 
         # Calculate Duration
@@ -47,13 +52,27 @@ def calculate_rate(file_path):
             0
         ]
 
+        # Normalize RMS (0 to 1 scale)
+        if np.max(rms_energy) - np.min(rms_energy) == 0:
+            rms_normalized = rms_energy  # Handle absolute silence case
+        else:
+            rms_normalized = (rms_energy - np.min(rms_energy)) / (
+                np.max(rms_energy) - np.min(rms_energy)
+            )
+
+        # --- [CHANGE 2] Calculate Average Energy (Ignoring Silence) ---
+        # We consider "non-silence" as any frame with energy > MIN_PEAK_HEIGHT
+        # This prevents the silence between sentences from dragging down the average.
+        non_silent_frames = rms_normalized[rms_normalized > MIN_PEAK_HEIGHT]
+
+        if len(non_silent_frames) > 0:
+            avg_energy = np.mean(non_silent_frames)
+        else:
+            avg_energy = 0.0
+
         # Peak Detection
         time_per_frame = hop_length / sr
         min_distance_indices = int(MIN_PEAK_DISTANCE_SEC / time_per_frame)
-
-        rms_normalized = (rms_energy - np.min(rms_energy)) / (
-            np.max(rms_energy) - np.min(rms_energy)
-        )
 
         peaks, _ = find_peaks(
             rms_normalized, height=MIN_PEAK_HEIGHT, distance=min_distance_indices
@@ -67,10 +86,12 @@ def calculate_rate(file_path):
         else:
             rate_sps = 0
 
+        # --- [CHANGE 3] Add new metric to return dictionary ---
         return {
             OUTPUT_COLUMNS[0]: filename,
             OUTPUT_COLUMNS[1]: round(duration_sec, 2),
             OUTPUT_COLUMNS[2]: round(rate_sps, 2),
+            OUTPUT_COLUMNS[3]: round(avg_energy, 4),  # 4 decimal places for precision
         }
 
     except Exception as e:
@@ -99,13 +120,13 @@ def main():
     df = pd.DataFrame(results)
 
     if not df.empty:
-        # 1. Print to console
+        # Format output
         table_string = df.to_string(index=False)
-        print("\n" + "=" * 60)
-        print(table_string)
-        print("=" * 60 + "\n")
 
-        # 2. Save to .txt file (Writing the formatted string to preserve alignment)
+        print("\n" + "=" * 80)  # Made the separator line longer
+        print(table_string)
+        print("=" * 80 + "\n")
+
         try:
             with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
                 f.write(table_string)
