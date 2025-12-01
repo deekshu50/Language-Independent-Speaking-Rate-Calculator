@@ -1,0 +1,5 @@
+wav/*.wav
+.venv
+results.txt
+
+!wav/
